@@ -9,6 +9,9 @@ import { getProfile } from "@/features/profile/queries";
 import { StylistClient } from "@/features/outfits/components/stylist-client";
 import type { PickerItem } from "@/features/outfits/components/item-picker";
 
+// Server Actions of this page may call the AI provider (bounded to ~60s in total).
+export const maxDuration = 60;
+
 export const metadata: Metadata = { title: "AI Stylist" };
 
 export default async function StylistPage({ searchParams }: PageProps<"/stylist">) {

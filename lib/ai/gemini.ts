@@ -3,6 +3,7 @@ import { AiError, type GarmentAnalyzer, type OutfitLanguageModel, type ProviderU
 import { garmentAnalysisSchema } from "@/lib/validation/wardrobe";
 import { garmentSystemPrompt } from "./prompts";
 import { toJsonSchema } from "./anthropic";
+import { log } from "@/lib/utils/logger";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -33,16 +34,18 @@ interface GeminiCall {
   parts: Array<Record<string, unknown>>;
   jsonSchema: Record<string, unknown>;
   maxTokens: number;
-  timeoutMs: number;
+  /** Overall time budget for the primary model (the fallback gets ~70% of it). */
+  budgetMs: number;
 }
 
 /** One generateContent call with JSON-schema constrained output, controlled retries and a fallback model. */
 async function callGemini(opts: GeminiCall): Promise<{ json: unknown; usage: ProviderUsage }> {
   const models = [opts.model, ...(opts.fallbackModel && opts.fallbackModel !== opts.model ? [opts.fallbackModel] : [])];
   let lastError: AiError | null = null;
-  for (const model of models) {
+  for (const [i, model] of models.entries()) {
+    const budget = i === 0 ? opts.budgetMs : Math.round(opts.budgetMs * 0.7);
     try {
-      return await callGeminiModel(opts, model);
+      return await callGeminiModel(opts, model, budget);
     } catch (e) {
       // Only overload/network-type failures justify switching model; bad output or auth errors do not.
       if (e instanceof AiError && (e.code === "rate_limited" || e.code === "timeout" || e.code === "provider_error" && /HTTP 5\d\d|HTTP 429|rete/.test(e.message))) {
@@ -55,8 +58,10 @@ async function callGemini(opts: GeminiCall): Promise<{ json: unknown; usage: Pro
   throw lastError ?? new AiError("provider_error", "Errore sconosciuto del provider AI");
 }
 
-async function callGeminiModel(opts: GeminiCall, model: string): Promise<{ json: unknown; usage: ProviderUsage }> {
+async function callGeminiModel(opts: GeminiCall, model: string, budgetMs: number): Promise<{ json: unknown; usage: ProviderUsage }> {
   const started = Date.now();
+  const deadline = started + budgetMs;
+  let useThinkingConfig = true;
   let lastError: AiError | null = null;
   const generationConfig: Record<string, unknown> = {
     responseMimeType: "application/json",
@@ -68,14 +73,21 @@ async function callGeminiModel(opts: GeminiCall, model: string): Promise<{ json:
     generationConfig.maxOutputTokens = opts.maxTokens;
     generationConfig.thinkingConfig = { thinkingBudget: 0 };
   } else {
-    // Newer models always reason internally; leave room so the JSON answer is never truncated.
+    // Newer models reason internally: keep it minimal (this task is a simple selection) and leave room for the JSON.
     generationConfig.maxOutputTokens = Math.max(opts.maxTokens, 4096);
   }
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1500 * attempt));
+    const remaining = deadline - Date.now();
+    if (remaining < 2000) {
+      lastError = new AiError("timeout", `Gemini (${model}): tempo massimo esaurito`);
+      break;
+    }
+    const gc = { ...generationConfig };
+    if (useThinkingConfig && !/^gemini-2\.5-flash/.test(model)) gc.thinkingConfig = { thinkingLevel: "minimal" };
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), remaining);
     try {
       const res = await fetch(`${BASE}/${encodeURIComponent(model)}:generateContent`, {
         method: "POST",
@@ -84,7 +96,7 @@ async function callGeminiModel(opts: GeminiCall, model: string): Promise<{ json:
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: opts.system }] },
           contents: [{ role: "user", parts: opts.parts }],
-          generationConfig,
+          generationConfig: gc,
         }),
       });
       if (!res.ok) {
@@ -94,6 +106,11 @@ async function callGeminiModel(opts: GeminiCall, model: string): Promise<{ json:
           res.status === 429 ? "rate_limited" : "provider_error",
           `Gemini HTTP ${res.status} (${model}): ${detail.slice(0, 160)}`,
         );
+        if (res.status === 400 && useThinkingConfig && /thinking/i.test(detail)) {
+          useThinkingConfig = false; // this model does not accept the thinking hint: retry without it
+          attempt--;
+          continue;
+        }
         if (res.status === 429 || res.status >= 500) {
           lastError = err; // transient: retry
           continue;
@@ -110,6 +127,7 @@ async function callGeminiModel(opts: GeminiCall, model: string): Promise<{ json:
       } catch {
         throw new AiError("invalid_output", "Risposta AI non è JSON valido");
       }
+      log.info("gemini_call", { model, ms: Date.now() - started, attempts: attempt + 1, outTokens: json.usageMetadata?.candidatesTokenCount });
       return {
         json: parsed,
         usage: {
@@ -123,8 +141,9 @@ async function callGeminiModel(opts: GeminiCall, model: string): Promise<{ json:
     } catch (e) {
       if (e instanceof AiError) throw e;
       if (e instanceof Error && e.name === "AbortError") {
-        lastError = new AiError("timeout", "Il provider AI non ha risposto in tempo");
-        continue;
+        // A slow model will not get faster by retrying: hand over to the fallback model.
+        lastError = new AiError("timeout", `Gemini (${model}) non ha risposto entro ${Math.round(budgetMs / 1000)}s`);
+        break;
       }
       lastError = new AiError("provider_error", "Errore di rete verso il provider AI");
     } finally {
@@ -148,7 +167,7 @@ export function createGeminiLanguageModel(): OutfitLanguageModel | null {
         parts: [{ text: req.user }],
         jsonSchema: req.jsonSchema,
         maxTokens: Math.max(req.maxTokens ?? 1500, 1500),
-        timeoutMs: 30_000,
+        budgetMs: 15_000,
       });
       let value: T;
       try {
@@ -180,7 +199,7 @@ export function createGeminiAnalyzer(): GarmentAnalyzer | null {
         ],
         jsonSchema: schema,
         maxTokens: 800,
-        timeoutMs: 25_000,
+        budgetMs: 25_000,
       });
       const parsed = garmentAnalysisSchema.safeParse(json);
       if (!parsed.success) throw new AiError("invalid_output", "L'analisi AI non è nel formato atteso");

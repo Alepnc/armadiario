@@ -47,7 +47,7 @@ describe("Gemini provider (fetch mocked)", () => {
     expect(body.generationConfig.responseJsonSchema.type).toBe("object");
     expect(body.systemInstruction.parts[0].text).toBe("sys");
     expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(4096);
-    expect(body.generationConfig.thinkingConfig).toBeUndefined();
+    expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: "minimal" });
   });
 
   it("rejects output that does not match the schema instead of trusting it", async () => {
@@ -97,6 +97,40 @@ describe("Gemini provider (fetch mocked)", () => {
       createGeminiLanguageModel()!.complete({ system: "s", user: "u", toolName: "x", toolDescription: "x", jsonSchema: {}, parse: (r) => r }),
     ).rejects.toThrow(/HTTP 400/);
     expect(seen).toHaveLength(1);
+  });
+
+  it("does not retry a timed-out model: hands over to the fallback quickly", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
+      const model = String(url).match(/models\/([^:]+):/)![1];
+      seen.push(model);
+      if (model === "gemini-3.8-flash") {
+        return new Promise((_res, rej) => init.signal!.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+      }
+      return Promise.resolve(ok("{\"a\":3}"));
+    });
+    vi.useFakeTimers();
+    const p = createGeminiLanguageModel()!.complete({ system: "s", user: "u", toolName: "x", toolDescription: "x", jsonSchema: {}, parse: (r) => r });
+    await vi.advanceTimersByTimeAsync(16_000);
+    const res = await p;
+    vi.useRealTimers();
+    expect(res.usage.model).toBe("gemini-3.5-flash-lite");
+    expect(seen).toEqual(["gemini-3.8-flash", "gemini-3.5-flash-lite"]);
+  });
+
+  it("asks for minimal reasoning and drops the hint if the model rejects it", async () => {
+    const bodies: Array<{ generationConfig: Record<string, unknown> }> = [];
+    vi.stubGlobal("fetch", async (_u: string, init: RequestInit) => {
+      const b = JSON.parse(init.body as string);
+      bodies.push(b);
+      return b.generationConfig.thinkingConfig
+        ? new Response(JSON.stringify({ error: { message: "Unknown name thinkingLevel: thinking_config" } }), { status: 400 })
+        : ok("{\"a\":4}");
+    });
+    const res = await createGeminiLanguageModel()!.complete({ system: "s", user: "u", toolName: "x", toolDescription: "x", jsonSchema: {}, parse: (r) => r });
+    expect(res.value).toEqual({ a: 4 });
+    expect(bodies[0].generationConfig.thinkingConfig).toEqual({ thinkingLevel: "minimal" });
+    expect(bodies[1].generationConfig.thinkingConfig).toBeUndefined();
   });
 
   it("analyzer sends the photo as inline data and validates the answer", async () => {
