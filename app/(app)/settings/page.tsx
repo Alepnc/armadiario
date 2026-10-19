@@ -17,6 +17,7 @@ export default async function SettingsPage() {
       <PageHeader title="Impostazioni e privacy" description="Decidi cosa può essere inviato ai servizi AI e gestisci i tuoi dati." />
       <SettingsPanel
         aiConsent={Boolean(profile?.ai_consent_at)}
+        visionConsent={Boolean(profile?.ai_vision_consent_at)}
         tryonConsent={Boolean(profile?.tryon_consent_at)}
         hasTryOnPhoto={Boolean(profile?.tryon_photo_path)}
         accountDeletionEnabled={isAdminConfigured()}

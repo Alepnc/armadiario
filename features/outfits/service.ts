@@ -17,7 +17,8 @@ import { ConstraintError, filterPool, generateCandidates } from "./engine/genera
 import { ROLE_BY_SLOT } from "./engine/rules";
 import { validateOutfit } from "./engine/validate";
 import type { Candidate, EngineItem, EngineProfile, EngineRequest } from "./engine/types";
-import { extractIntent, mergeIntent, selectAndExplain } from "./llm";
+import { extractIntent, mergeIntent, selectAndExplain, type StylistPhoto } from "./llm";
+import { detectImageMime } from "@/lib/images/detect";
 import { toEngineItem, toEngineProfile, toEngineRequest, toItemView } from "./mappers";
 import type { GenerationResponse, ProposalView } from "./types";
 
@@ -35,6 +36,8 @@ interface Loaded {
   engineItems: EngineItem[];
   profile: EngineProfile;
   consent: boolean;
+  /** Separate consent: garment photos may be sent to the stylist model. */
+  visionConsent: boolean;
 }
 
 async function load(supabase: ServerSupabase, userId: string): Promise<Loaded> {
@@ -45,6 +48,7 @@ async function load(supabase: ServerSupabase, userId: string): Promise<Loaded> {
     engineItems: items.map(toEngineItem),
     profile: toEngineProfile(profileRow),
     consent: Boolean(profileRow?.ai_consent_at),
+    visionConsent: Boolean(profileRow?.ai_vision_consent_at),
   };
 }
 
@@ -122,6 +126,37 @@ function candidateEntry(c: Candidate, req: EngineRequest, idx: number, key: stri
   };
 }
 
+const MAX_PHOTOS = 20;
+const MAX_CANDIDATES_WITH_PHOTOS = 8;
+
+/** AI_STYLIST_VISION=off lets an operator turn photo evaluation off for everyone. */
+function visionEnabledByOperator(): boolean {
+  return !["off", "0", "false", "no"].includes((process.env.AI_STYLIST_VISION ?? "on").toLowerCase());
+}
+
+/**
+ * Downloads the small thumbnails of the garments in the candidates (as the user, so RLS applies).
+ * Photos that cannot be read are simply skipped: the model still has the text data for them.
+ */
+async function loadPhotos(supabase: ServerSupabase, loaded: Loaded, candidates: Candidate[]): Promise<StylistPhoto[]> {
+  const order: string[] = [];
+  for (const c of candidates) for (const m of c.members) if (!order.includes(m.item.id)) order.push(m.item.id);
+  const wanted = order.slice(0, MAX_PHOTOS);
+  const got = await Promise.all(
+    wanted.map(async (id, i): Promise<StylistPhoto | null> => {
+      const item = loaded.byId.get(id);
+      if (!item) return null;
+      const dl = await supabase.storage.from(BUCKETS.wardrobe).download(item.thumb_path ?? item.image_path);
+      if (dl.error || !dl.data) return null;
+      const data = Buffer.from(await dl.data.arrayBuffer());
+      const mediaType = detectImageMime(data);
+      if (!mediaType) return null;
+      return { itemId: id, tag: `K${i + 1}`, label: `${item.name} (${item.category.label})`, mediaType, data };
+    }),
+  );
+  return got.filter((p): p is StylistPhoto => p !== null);
+}
+
 export interface GenerateOptions {
   /** Combination (item ids) to steer away from, used for "variant" requests. */
   avoidCombo?: string[];
@@ -145,6 +180,7 @@ export async function generateOutfits(
   const model = getLanguageModel();
   let modeNote: string | null = null;
   let useModel = false;
+  let photosSent = 0;
   if (!model) {
     modeNote = "L'AI non è configurata: gli outfit sono composti dalle regole di abbinamento dell'app.";
   } else if (!loaded.consent) {
@@ -192,6 +228,7 @@ export async function generateOutfits(
       proposals: [],
       mode: "rules",
       modeNote,
+      usedPhotos: false,
       shortage: result.shortage
         ? { message: result.shortage.message, missing: result.shortage.missingSlots.map((s) => SLOT_LABEL[s]) }
         : null,
@@ -204,11 +241,17 @@ export async function generateOutfits(
   if (useModel && model) {
     const started = Date.now();
     try {
+      // Show the model the garment photos only with the user\'s separate consent (and if the operator allows it).
+      const withPhotos = loaded.visionConsent && visionEnabledByOperator();
+      const forModel = withPhotos ? result.candidates.slice(0, MAX_CANDIDATES_WITH_PHOTOS) : result.candidates;
+      const photos = withPhotos ? await loadPhotos(supabase, loaded, forModel) : [];
+      photosSent = photos.length;
       const { selection, usage } = await selectAndExplain(model, {
-        candidates: result.candidates,
+        candidates: forModel,
         request: req,
         profile: loaded.profile,
         count: req.count,
+        photos,
       });
       const byCand = new Map(result.candidates.map((c) => [c.id, c]));
       entries = selection.outfits.flatMap((o, idx) => {
@@ -268,6 +311,7 @@ export async function generateOutfits(
     proposals: await buildViews(supabase, loaded, valid),
     mode: valid.some((e) => e.source === "ai") ? mode : "rules",
     modeNote,
+    usedPhotos: mode === "ai" && photosSent > 0,
     shortage: null,
     notes: result.relaxed,
   };

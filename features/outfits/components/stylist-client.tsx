@@ -203,6 +203,7 @@ export function StylistClient({
         {result && !pending && (
           <>
             {result.modeNote && <Notice tone="info">{result.modeNote}</Notice>}
+            {result.usedPhotos && <Notice tone="info">L&apos;AI ha guardato le foto dei capi per scegliere e spiegare questi abbinamenti.</Notice>}
             {result.notes.map((n) => <Notice key={n} tone="warn">{n}</Notice>)}
             {result.shortage ? (
               <EmptyState

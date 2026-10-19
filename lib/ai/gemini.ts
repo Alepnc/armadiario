@@ -166,10 +166,16 @@ export function createGeminiLanguageModel(): OutfitLanguageModel | null {
         model: cfg.stylistModel,
         fallbackModel: cfg.fallbackModel,
         system: req.system,
-        parts: [{ text: req.user }],
+        parts: [
+          ...(req.images ?? []).flatMap((img) => [
+            { text: img.label },
+            { inline_data: { mime_type: img.mediaType, data: img.data.toString("base64") } },
+          ]),
+          { text: req.user },
+        ],
         jsonSchema: req.jsonSchema,
         maxTokens: Math.max(req.maxTokens ?? 1500, 1500),
-        budgetMs: 15_000,
+        budgetMs: req.images?.length ? 25_000 : 15_000,
       });
       let value: T;
       try {

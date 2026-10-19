@@ -133,6 +133,28 @@ describe("Gemini provider (fetch mocked)", () => {
     expect(bodies[1].generationConfig.thinkingConfig).toBeUndefined();
   });
 
+  it("sends labelled garment photos before the prompt and allows more time", async () => {
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return ok("{\"a\":5}");
+    });
+    await createGeminiLanguageModel()!.complete({
+      system: "s",
+      user: "PROMPT",
+      toolName: "x",
+      toolDescription: "x",
+      jsonSchema: {},
+      parse: (r) => r,
+      images: [
+        { label: "Foto K1: Jeans", mediaType: "image/webp", data: Buffer.from("aaa") },
+        { label: "Foto K2: Maglia", mediaType: "image/webp", data: Buffer.from("bbb") },
+      ],
+    });
+    const parts = JSON.parse(calls[0].init.body as string).contents[0].parts;
+    expect(parts.map((p: Record<string, unknown>) => (p.text as string | undefined) ?? "img")).toEqual(["Foto K1: Jeans", "img", "Foto K2: Maglia", "img", "PROMPT"]);
+    expect(parts[1].inline_data).toMatchObject({ mime_type: "image/webp", data: Buffer.from("aaa").toString("base64") });
+  });
+
   it("analyzer sends the photo as inline data and validates the answer", async () => {
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
       calls.push({ url, init });

@@ -31,6 +31,8 @@ export interface GenerationResponse {
   mode: "ai" | "rules";
   /** Why AI was not used, when relevant (not configured, no consent, quota…). */
   modeNote: string | null;
+  /** True when the model was shown the garment photos while choosing. */
+  usedPhotos: boolean;
   shortage: { message: string; missing: string[] } | null;
   notes: string[];
 }

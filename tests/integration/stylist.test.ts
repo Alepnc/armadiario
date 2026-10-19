@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OutfitLanguageModel, StructuredRequest } from "@/lib/ai/types";
 import { addItem, createTestUser, deleteTestUser, integrationEnabled, type TestUser } from "../helpers/supabase";
@@ -56,7 +57,8 @@ describe.skipIf(!integrationEnabled)("outfit pipeline with a real database and f
     state.client = u.client;
     state.userId = u.id;
     await u.client.from("clothing_items").update({ availability_status: "available" }).eq("user_id", u.id);
-    await u.client.from("profiles").update({ ai_consent_at: null }).eq("id", u.id);
+    await u.client.from("profiles").update({ ai_consent_at: null, ai_vision_consent_at: null }).eq("id", u.id);
+    vi.unstubAllEnvs();
   });
 
   const asServer = () => u.client as unknown as ServerSupabase;
@@ -177,6 +179,68 @@ describe.skipIf(!integrationEnabled)("outfit pipeline with a real database and f
     const res = await generateOutfits(asServer(), u.id, req({ count: 1 }));
     expect(called).toBe(false);
     expect(res.modeNote).toMatch(/consenso/);
+  });
+
+  describe("photos for the stylist model", () => {
+    const fake = (log: StructuredRequest<unknown>[]): OutfitLanguageModel => ({
+      name: "fake",
+      async complete<T>(r: StructuredRequest<T>) {
+        log.push(r as StructuredRequest<unknown>);
+        const value = r.parse({ outfits: [{ candidate_id: "c1", title: "Con foto", reason: "Guardando le foto i colori si accordano.", tips: [] }] });
+        return { value, usage: { provider: "fake", model: "fake-1", durationMs: 1 } };
+      },
+    });
+
+    beforeAll(async () => {
+      const { data } = await u.client.from("clothing_items").select("image_path").eq("user_id", u.id);
+      const img = await sharp({ create: { width: 40, height: 50, channels: 3, background: "#336699" } }).webp().toBuffer();
+      for (const r of data ?? []) await u.client.storage.from("wardrobe").upload(r.image_path as string, img, { contentType: "image/webp", upsert: true });
+    });
+
+    it("sends the garment photos only with the separate photo consent", async () => {
+      await u.client.from("profiles").update({ ai_consent_at: new Date().toISOString() }).eq("id", u.id);
+      const calls: StructuredRequest<unknown>[] = [];
+      state.model = fake(calls);
+      const textOnly = await generateOutfits(asServer(), u.id, req({ count: 1 }));
+      expect(textOnly.mode).toBe("ai");
+      expect(textOnly.usedPhotos).toBe(false);
+      expect(calls.at(-1)!.images).toBeUndefined();
+
+      await u.client.from("profiles").update({ ai_vision_consent_at: new Date().toISOString() }).eq("id", u.id);
+      const withPhotos = await generateOutfits(asServer(), u.id, req({ count: 1 }));
+      expect(withPhotos.usedPhotos).toBe(true);
+      const sent = calls.at(-1)!;
+      expect(sent.images!.length).toBeGreaterThan(0);
+      expect(sent.images!.length).toBeLessThanOrEqual(20);
+      expect(sent.images!.every((i) => /^Foto K\d+: /.test(i.label) && i.mediaType === "image/webp" && i.data.length > 0)).toBe(true);
+      // Opaque tags only: neither the prompt nor the labels contain database ids, and foreign garments are never sent.
+      const everything = sent.user + sent.images!.map((i) => i.label).join(" ");
+      for (const real of Object.values(ids)) expect(everything).not.toContain(real);
+      expect(everything).not.toContain("Jeans di un altro");
+      expect(sent.user).toMatch(/"foto":"K\d+"/);
+      expect(sent.system).toMatch(/FOTO dei capi/);
+    });
+
+    it("the operator can switch photo evaluation off for everyone", async () => {
+      await u.client.from("profiles").update({ ai_consent_at: new Date().toISOString(), ai_vision_consent_at: new Date().toISOString() }).eq("id", u.id);
+      const calls: StructuredRequest<unknown>[] = [];
+      state.model = fake(calls);
+      vi.stubEnv("AI_STYLIST_VISION", "off");
+      const res = await generateOutfits(asServer(), u.id, req({ count: 1 }));
+      expect(res.usedPhotos).toBe(false);
+      expect(calls.at(-1)!.images).toBeUndefined();
+    });
+
+    it("garments whose photo cannot be read are still evaluated from text, without failing", async () => {
+      await u.client.from("profiles").update({ ai_consent_at: new Date().toISOString(), ai_vision_consent_at: new Date().toISOString() }).eq("id", u.id);
+      const { data } = await u.client.from("clothing_items").select("image_path").eq("id", ids.chino).single();
+      await u.client.storage.from("wardrobe").remove([data!.image_path as string]);
+      const calls: StructuredRequest<unknown>[] = [];
+      state.model = fake(calls);
+      const res = await generateOutfits(asServer(), u.id, req({ count: 1 }));
+      expect(res.mode).toBe("ai");
+      expect(res.proposals.length).toBe(1);
+    });
   });
 
   describe("saved outfits", () => {

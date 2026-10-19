@@ -163,11 +163,11 @@ Ogni capacità è configurata **indipendentemente** (`lib/ai/registry.ts`, `lib/
 
 1. **Analisi foto capi (multimodale)** e 2. **Stylist testuale** — Anthropic Messages API (`lib/ai/anthropic.ts`),
    output strutturato forzato con tool-use + validazione Zod, timeout e retry controllati. Imposta `ANTHROPIC_API_KEY`.
-   Il modello di analisi riceve la foto del capo; quello dello stylist riceve **solo testo** (nomi e caratteristiche dei capi, preferenze, nota dell'utente), mai foto o id del DB.
+   Il modello di analisi riceve la foto del capo. Il modello dello stylist riceve nomi e caratteristiche dei capi, preferenze e nota dell'utente e, **solo se l'utente ha dato il consenso separato "Foto dei capi per lo stylist"**, anche le miniature (≤ 20) dei capi nei candidati, con etichette opache (`K1`, `K2`…); mai id del DB né capi di altri utenti. `AI_STYLIST_VISION=off` disattiva le foto per tutti.
    **Alternativa gratuita — Google Gemini** (`lib/ai/gemini.ts`): imposta `GEMINI_API_KEY` (gratis da aistudio.google.com/apikey) e, se vuoi,
    `AI_STYLIST_PROVIDER=gemini` / `AI_ANALYSIS_PROVIDER=gemini`. Modello di default `gemini-3.5-flash-lite` (gratuito, veloce: ~2 s per scegliere gli outfit), con `gemini-3.8-flash` come riserva (`GEMINI_FALLBACK_MODEL`); `gemini-2.5-flash` non è più disponibile ai nuovi account.
    ⚠️ Sul piano gratuito Google dichiara di poter usare i contenuti inviati per migliorare i propri prodotti, e i limiti di richieste sono bassi.
-   Per i dati più sensibili (foto) valuta `AI_ANALYSIS_PROVIDER=none` e usa Gemini solo per lo stylist (che riceve solo testo).
+   Le foto sono dati più sensibili: per evitarle usa `AI_ANALYSIS_PROVIDER=none` e `AI_STYLIST_VISION=off` (lo stylist riceverà solo testo).
 3. **Virtual try-on** — Replicate (`lib/ai/tryon/replicate.ts`), pensato per modelli tipo **IDM-VTON** (input: persona + capo + categoria `upper_body|lower_body|dresses`).
    Imposta `REPLICATE_API_TOKEN` e `REPLICATE_TRYON_VERSION` (hash di versione del modello scelto su replicate.com).
    Se il tuo modello usa nomi di input diversi, usa `REPLICATE_TRYON_HUMAN_FIELD` / `REPLICATE_TRYON_GARMENT_FIELD`.
@@ -236,7 +236,7 @@ Pulizia consigliata (cron Supabase): immagini generate non salvate (`generated_i
 * Ogni Server Action / route handler: valida con Zod, verifica la sessione con `auth.getUser()` (non il solo cookie), verifica la proprietà (RLS + controlli espliciti).
 * Upload: dimensione, **magic bytes** (non l'estensione), limite di pixel, ricodifica WebP (rimuove EXIF/GPS), percorsi vincolati a `"<uid>/…"`.
 * URL firmati a scadenza breve; bucket privati; nessun dato personale nei log; chiavi solo lato server.
-* L'invio di immagini/dati a servizi esterni richiede un consenso esplicito e revocabile (Impostazioni → Privacy). Le foto personali non vengono usate per altri scopi.
+* L'invio di immagini/dati a servizi esterni richiede un consenso esplicito e revocabile (Impostazioni → Privacy), distinto per: dati testuali dello stylist, foto dei capi per lo stylist, prova virtuale. Le foto personali non vengono usate per altri scopi.
 * Header di sicurezza (`nosniff`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`); redirect post-login limitati a percorsi interni; reset password senza enumerazione degli utenti.
 
 ## Limiti noti

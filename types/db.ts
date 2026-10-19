@@ -22,6 +22,7 @@ export interface Profile {
   fit_preference: Fit | null;
   notes: string | null;
   ai_consent_at: string | null;
+  ai_vision_consent_at: string | null;
   tryon_consent_at: string | null;
   created_at: string;
   updated_at: string;

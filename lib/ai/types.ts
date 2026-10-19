@@ -50,4 +50,12 @@ export interface StructuredRequest<T> {
   jsonSchema: Record<string, unknown>;
   parse: (raw: unknown) => T;
   maxTokens?: number;
+  /** Photos the model should look at, each with a short text label shown right before it. */
+  images?: StructuredImage[];
+}
+
+export interface StructuredImage {
+  label: string;
+  mediaType: "image/webp" | "image/jpeg" | "image/png";
+  data: Buffer;
 }

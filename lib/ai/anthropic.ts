@@ -120,12 +120,18 @@ export function createAnthropicLanguageModel(): OutfitLanguageModel | null {
         model: cfg.stylistModel,
         apiKey: cfg.apiKey,
         system: req.system,
-        content: [{ type: "text", text: req.user }],
+        content: [
+          ...(req.images ?? []).flatMap((img) => [
+            { type: "text", text: img.label },
+            { type: "image", source: { type: "base64", media_type: img.mediaType, data: img.data.toString("base64") } },
+          ]),
+          { type: "text", text: req.user },
+        ],
         toolName: req.toolName,
         toolDescription: req.toolDescription,
         jsonSchema: req.jsonSchema,
         maxTokens: req.maxTokens ?? 1500,
-        timeoutMs: 30_000,
+        timeoutMs: req.images?.length ? 45_000 : 30_000,
       });
       let value: T;
       try {

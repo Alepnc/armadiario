@@ -32,16 +32,19 @@ function Toggle({ checked, onChange, label, description, disabled }: { checked: 
 
 export function SettingsPanel({
   aiConsent,
+  visionConsent,
   tryonConsent,
   hasTryOnPhoto,
   accountDeletionEnabled,
 }: {
   aiConsent: boolean;
+  visionConsent: boolean;
   tryonConsent: boolean;
   hasTryOnPhoto: boolean;
   accountDeletionEnabled: boolean;
 }) {
   const [ai, setAi] = useState(aiConsent);
+  const [vision, setVision] = useState(visionConsent);
   const [tryon, setTryon] = useState(tryonConsent);
   const [photo, setPhoto] = useState(hasTryOnPhoto);
   const [pending, start] = useTransition();
@@ -51,12 +54,16 @@ export function SettingsPanel({
   const toast = useToast();
   const router = useRouter();
 
-  async function consent(kind: "ai" | "tryon", value: boolean) {
-    const prev = kind === "ai" ? ai : tryon;
-    (kind === "ai" ? setAi : setTryon)(value);
+  async function consent(kind: "ai" | "vision" | "tryon", value: boolean) {
+    const setters = { ai: setAi, vision: setVision, tryon: setTryon } as const;
+    const prev = { ai, vision, tryon };
+    setters[kind](value);
+    if (kind === "ai" && !value) setVision(false); // photos need the base consent
     const res = await setConsentAction({ [kind]: value });
     if (!res.ok) {
-      (kind === "ai" ? setAi : setTryon)(prev);
+      setAi(prev.ai);
+      setVision(prev.vision);
+      setTryon(prev.tryon);
       return toast.error(res.error);
     }
     toast.success(value ? "Consenso registrato" : "Consenso revocato");
@@ -75,6 +82,13 @@ export function SettingsPanel({
             onChange={(v) => consent("ai", v)}
             label="Analisi dei capi e scelta degli outfit"
             description="Le foto dei capi (solo quando chiedi l'analisi) e nomi/caratteristiche dei capi, preferenze e note dello stylist vengono inviati al provider AI configurato per suggerire metadati e comporre/spiegare gli outfit. Con i piani gratuiti di alcuni provider (es. Gemini) i contenuti inviati possono essere usati dal fornitore per migliorare i suoi prodotti."
+          />
+          <Toggle
+            checked={vision}
+            disabled={!ai}
+            onChange={(v) => consent("vision", v)}
+            label="Foto dei capi per lo stylist"
+            description="Lo stylist guarda le miniature dei capi proposti per valutare colori, tessuti e proporzioni degli abbinamenti. Le foto (non i dati personali) vengono inviate al provider AI configurato. Richiede il consenso qui sopra. Con i piani gratuiti di alcuni provider (es. Gemini) il fornitore può usarle per migliorare i suoi prodotti."
           />
           <Toggle
             checked={tryon}

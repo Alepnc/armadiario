@@ -53,7 +53,7 @@ export async function setProfilePhotoAction(kind: PhotoKind, path: string | null
   });
 }
 
-const consentSchema = z.object({ ai: z.boolean().optional(), tryon: z.boolean().optional() });
+const consentSchema = z.object({ ai: z.boolean().optional(), vision: z.boolean().optional(), tryon: z.boolean().optional() });
 
 export async function setConsentAction(input: z.input<typeof consentSchema>): Promise<ActionResult> {
   return guard(async () => {
@@ -63,6 +63,9 @@ export async function setConsentAction(input: z.input<typeof consentSchema>): Pr
     const patch: Record<string, string | null> = {};
     const now = new Date().toISOString();
     if (parsed.data.ai !== undefined) patch.ai_consent_at = parsed.data.ai ? now : null;
+    // Photos need the base AI consent: withdrawing it withdraws the photo consent too.
+    if (parsed.data.ai === false) patch.ai_vision_consent_at = null;
+    if (parsed.data.vision !== undefined) patch.ai_vision_consent_at = parsed.data.vision ? now : null;
     if (parsed.data.tryon !== undefined) patch.tryon_consent_at = parsed.data.tryon ? now : null;
     if (Object.keys(patch).length === 0) return ok();
     const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);

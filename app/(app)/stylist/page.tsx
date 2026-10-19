@@ -35,9 +35,11 @@ export default async function StylistPage({ searchParams }: PageProps<"/stylist"
   const include = typeof sp.include === "string" && items.some((i) => i.id === sp.include) ? [sp.include] : [];
   const aiLabel = !getLanguageModel()
     ? "Modalità regole: l'AI non è configurata, gli abbinamenti sono calcolati dall'app."
-    : profile?.ai_consent_at
-      ? "L'AI sceglie tra abbinamenti già verificati. Alla AI vengono inviati solo nomi e caratteristiche dei capi, non le foto."
-      : "Per l'AI serve il consenso in Impostazioni → Privacy: intanto uso le regole di abbinamento.";
+    : !profile?.ai_consent_at
+      ? "Per l'AI serve il consenso in Impostazioni → Privacy: intanto uso le regole di abbinamento."
+      : profile.ai_vision_consent_at
+        ? "L'AI guarda le foto dei capi per valutare gli abbinamenti, scegliendo tra combinazioni già verificate."
+        : "L'AI valuta i dati dei capi (non le foto). Per farle guardare le foto attiva il consenso in Impostazioni → Privacy.";
 
   return (
     <>
