@@ -12,11 +12,12 @@ export function geminiConfig() {
   if (!apiKey) return null;
   return {
     apiKey,
-    // gemini-3.8-flash: free tier, multimodal, JSON-schema output. (2.5-flash is closed to new users.)
-    stylistModel: process.env.GEMINI_STYLIST_MODEL || "gemini-3.8-flash",
-    analysisModel: process.env.GEMINI_ANALYSIS_MODEL || "gemini-3.8-flash",
+    // gemini-3.5-flash-lite: free tier, multimodal, JSON-schema output, ~2s for a full outfit selection.
+    // (gemini-3.8-flash measured >15s on the same request; 2.5-flash is closed to new users.)
+    stylistModel: process.env.GEMINI_STYLIST_MODEL || "gemini-3.5-flash-lite",
+    analysisModel: process.env.GEMINI_ANALYSIS_MODEL || "gemini-3.5-flash-lite",
     // Used when the main model keeps answering 429/5xx (the free tier is often overloaded).
-    fallbackModel: process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite",
+    fallbackModel: process.env.GEMINI_FALLBACK_MODEL || "gemini-3.8-flash",
   };
 }
 
@@ -48,6 +49,7 @@ async function callGemini(opts: GeminiCall): Promise<{ json: unknown; usage: Pro
       return await callGeminiModel(opts, model, budget);
     } catch (e) {
       // Only overload/network-type failures justify switching model; bad output or auth errors do not.
+      if (e instanceof AiError) log.warn("gemini_model_failed", { model, code: e.code, message: e.message.slice(0, 200) });
       if (e instanceof AiError && (e.code === "rate_limited" || e.code === "timeout" || e.code === "provider_error" && /HTTP 5\d\d|HTTP 429|rete/.test(e.message))) {
         lastError = e;
         continue;

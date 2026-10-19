@@ -11,7 +11,7 @@ async function timed(url, init, ms = 45000) {
   }
 }
 if (gemini) {
-  const model = process.env.GEMINI_STYLIST_MODEL || "gemini-3.8-flash";
+  const model = process.env.GEMINI_STYLIST_MODEL || "gemini-3.5-flash-lite";
   console.log(`[gemini] chiave trovata (${gemini.length} caratteri). Controllo i modelli disponibili…`);
   try {
     const list = await timed("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { headers: { "x-goog-api-key": gemini } }, 20000);

@@ -40,7 +40,7 @@ describe("Gemini provider (fetch mocked)", () => {
     expect(value.outfits[0].candidate_id).toBe("c1");
     expect(usage).toMatchObject({ provider: "gemini", inputTokens: 11, outputTokens: 7 });
     const body = JSON.parse(calls[0].init.body as string);
-    expect(calls[0].url).toContain("/models/gemini-3.8-flash:generateContent");
+    expect(calls[0].url).toContain("/models/gemini-3.5-flash-lite:generateContent");
     expect(calls[0].url).not.toContain("test-key");
     expect((calls[0].init.headers as Record<string, string>)["x-goog-api-key"]).toBe("test-key");
     expect(body.generationConfig.responseMimeType).toBe("application/json");
@@ -74,12 +74,12 @@ describe("Gemini provider (fetch mocked)", () => {
     const seen: string[] = [];
     vi.stubGlobal("fetch", async (url: string) => {
       seen.push(String(url).match(/models\/([^:]+):/)![1]);
-      return String(url).includes("gemini-3.8-flash:") ? new Response(JSON.stringify({ error: { message: "The model is overloaded" } }), { status: 503 }) : ok("{\"a\":2}");
+      return String(url).includes("gemini-3.5-flash-lite:") ? new Response(JSON.stringify({ error: { message: "The model is overloaded" } }), { status: 503 }) : ok("{\"a\":2}");
     });
     const res = await createGeminiLanguageModel()!.complete({ system: "s", user: "u", toolName: "x", toolDescription: "x", jsonSchema: {}, parse: (r) => r });
     expect(res.value).toEqual({ a: 2 });
-    expect(res.usage.model).toBe("gemini-3.5-flash-lite");
-    expect(seen.filter((m) => m === "gemini-3.8-flash")).toHaveLength(3); // 3 attempts, then the fallback
+    expect(res.usage.model).toBe("gemini-3.8-flash");
+    expect(seen.filter((m) => m === "gemini-3.5-flash-lite")).toHaveLength(3); // 3 attempts, then the fallback
 
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { message: "The model is overloaded" } }), { status: 503 }));
     await expect(
@@ -104,7 +104,7 @@ describe("Gemini provider (fetch mocked)", () => {
     vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
       const model = String(url).match(/models\/([^:]+):/)![1];
       seen.push(model);
-      if (model === "gemini-3.8-flash") {
+      if (model === "gemini-3.5-flash-lite") {
         return new Promise((_res, rej) => init.signal!.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" }))));
       }
       return Promise.resolve(ok("{\"a\":3}"));
@@ -114,8 +114,8 @@ describe("Gemini provider (fetch mocked)", () => {
     await vi.advanceTimersByTimeAsync(16_000);
     const res = await p;
     vi.useRealTimers();
-    expect(res.usage.model).toBe("gemini-3.5-flash-lite");
-    expect(seen).toEqual(["gemini-3.8-flash", "gemini-3.5-flash-lite"]);
+    expect(res.usage.model).toBe("gemini-3.8-flash");
+    expect(seen).toEqual(["gemini-3.5-flash-lite", "gemini-3.8-flash"]);
   });
 
   it("asks for minimal reasoning and drops the hint if the model rejects it", async () => {
