@@ -152,7 +152,8 @@ test("7. stylist never proposes the washing garment; save outfit; it appears in 
   await page.goto("/stylist");
   await page.getByRole("button", { name: "Università" }).click();
   await page.getByRole("button", { name: "Crea outfit" }).click();
-  await expect(page.getByText(/L'AI non è configurata/).first()).toBeVisible();
+  // Without consent (or without a configured provider) the app says it uses the matching rules.
+  await expect(page.getByText(/L'AI non è configurata|serve il tuo consenso/).first()).toBeVisible();
   const proposals = page.locator("article");
   await expect(proposals.first()).toBeVisible({ timeout: 30_000 });
   expect(await proposals.count()).toBeGreaterThan(0);
