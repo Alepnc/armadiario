@@ -81,7 +81,7 @@ describe("AI output validation", () => {
     expect(garmentAnalysisSchema.safeParse({ name: "x", category_slug: "a", primary_color: "b", formality: 10 }).success).toBe(false);
     expect(llmSelectionSchema.safeParse({ outfits: [] }).success).toBe(false);
     expect(llmSelectionSchema.safeParse({ outfits: [{ candidate_id: "c1", title: "", reason: "x" }] }).success).toBe(false);
-    expect(llmSelectionSchema.safeParse({ outfits: [{ candidate_id: "c1", title: "ok", reason: "x".repeat(601) }] }).success).toBe(false);
+    expect(llmSelectionSchema.safeParse({ outfits: [{ candidate_id: "c1", title: "ok", reason: "x".repeat(1201) }] }).success).toBe(false);
     expect(llmSelectionSchema.safeParse({ outfits: [{ candidate_id: "c1", title: "ok", reason: "bene", tips: [] }] }).success).toBe(true);
   });
 });

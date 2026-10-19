@@ -70,11 +70,15 @@ async function callGemini(opts: GeminiCall): Promise<{ json: unknown; usage: Pro
         lastError = new AiError(res.status === 429 ? "rate_limited" : "provider_error", `Il provider AI ha risposto con stato ${res.status}`);
         continue;
       }
-      if (!res.ok) throw new AiError("provider_error", `Il provider AI ha risposto con stato ${res.status}`);
+      if (!res.ok) {
+        // Google's error text never contains our key; it is the quickest way to debug a 400/403/404.
+        const detail = ((await res.json().catch(() => ({}))) as { error?: { message?: string } }).error?.message ?? "";
+        throw new AiError("provider_error", `Gemini HTTP ${res.status}: ${detail.slice(0, 200)}`);
+      }
       const json = (await res.json()) as GenerateResponse;
       if (json.promptFeedback?.blockReason) throw new AiError("invalid_output", "Richiesta bloccata dai filtri del provider");
       const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-      if (!text) throw new AiError("invalid_output", "Risposta AI vuota");
+      if (!text) throw new AiError("invalid_output", `Risposta AI vuota (finishReason: ${json.candidates?.[0]?.finishReason ?? "n/d"})`);
       let parsed: unknown;
       try {
         parsed = JSON.parse(text);
@@ -123,8 +127,9 @@ export function createGeminiLanguageModel(): OutfitLanguageModel | null {
       let value: T;
       try {
         value = req.parse(json);
-      } catch {
-        throw new AiError("invalid_output", "L'output del modello non rispetta il formato richiesto");
+      } catch (e) {
+        const why = e instanceof Error ? e.message.replace(/\s+/g, " ").slice(0, 220) : "";
+        throw new AiError("invalid_output", `L'output del modello non rispetta il formato richiesto: ${why}`);
       }
       return { value, usage };
     },

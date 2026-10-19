@@ -31,9 +31,9 @@ export const llmSelectionSchema = z.object({
     .array(
       z.object({
         candidate_id: z.string().min(1).max(20),
-        title: z.string().trim().min(1).max(80),
-        reason: z.string().trim().min(1).max(600),
-        tips: z.array(z.string().trim().min(1).max(200)).max(3).default([]),
+        title: z.string().trim().min(1).max(120),
+        reason: z.string().trim().min(1).max(1200),
+        tips: z.array(z.string().trim().min(1).max(300)).max(4).default([]),
       }),
     )
     .min(1)
