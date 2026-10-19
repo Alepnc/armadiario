@@ -1,26 +1,132 @@
 @import "tailwindcss";
 
+/* Design tokens — warm white, anthracite, beige, one clay accent. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #faf6ee;
+  --paper-2: #f1ebdd;
+  --sand: #e6dcc6;
+  --ink: #15140f;
+  --ink-soft: #4d493f;
+  --muted: #6a6457;
+  --line: rgba(21, 20, 15, 0.22);
+  /* accent: used for text, links and fills with white/ink text (>= 4.5:1) */
+  --clay: #d63a1b;
+  --clay-deep: #b02a10;
+  --clay-tint: #ffe1d6;
+  /* loud fills (always paired with ink text) */
+  --pop: #ff5a36;
+  --lime: #d8f24a;
+  --lilac: #c8b6ff;
+  --sky: #a9d8ff;
+  --sage: #3f7a47;
+  --sage-tint: #dff0dc;
+  --tide: #2f5f9a;
+  --tide-tint: #dbe9fb;
+  --stone: #5f584d;
+  --stone-tint: #e9e4d8;
+  --danger: #b3261e;
+  --danger-tint: #fbe0dc;
+  color-scheme: light;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-sand: var(--sand);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-clay: var(--clay);
+  --color-clay-deep: var(--clay-deep);
+  --color-clay-tint: var(--clay-tint);
+  --color-sage: var(--sage);
+  --color-sage-tint: var(--sage-tint);
+  --color-tide: var(--tide);
+  --color-tide-tint: var(--tide-tint);
+  --color-stone: var(--stone);
+  --color-stone-tint: var(--stone-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-pop: var(--pop);
+  --color-lime: var(--lime);
+  --color-lilac: var(--lilac);
+  --color-sky: var(--sky);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display-face), ui-serif, Georgia, serif;
+  --radius-card: 1.75rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--paper);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.5;
 }
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+}
+
+:focus-visible {
+  outline: 2px solid var(--clay);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: var(--lime);
+  color: var(--ink);
+}
+
+/* Browser surfaces themed from the palette */
+input, textarea, select { caret-color: var(--clay); accent-color: var(--clay); }
+::placeholder { color: var(--muted); opacity: 1; }
+html { scrollbar-color: var(--sand) transparent; scrollbar-width: thin; }
+a { text-underline-offset: 0.22em; text-decoration-thickness: 1px; }
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
+.tnum { font-variant-numeric: tabular-nums lining-nums; }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* One authored moment: the landing flat-lay settles into place, piece by piece. */
+@keyframes settle {
+  from { opacity: 0; transform: translateY(14px) rotate(var(--r, 0deg)); filter: blur(3px); }
+  to { opacity: 1; transform: translateY(0) rotate(var(--r, 0deg)); filter: blur(0); }
+}
+.marker { background: linear-gradient(transparent 8%, var(--lime) 8%, var(--lime) 92%, transparent 92%); padding: 0 0.12em; margin: 0 -0.04em; border-radius: 0.12em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.settle { animation: settle 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: calc(var(--i, 0) * 110ms + 150ms); }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--paper-2) 25%, var(--sand) 37%, var(--paper-2) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: 0.75rem;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.rise { animation: rise 0.35s ease-out both; }
+
+dialog::backdrop { background: rgba(43, 42, 40, 0.45); backdrop-filter: blur(2px); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+.pb-safe { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem); }
