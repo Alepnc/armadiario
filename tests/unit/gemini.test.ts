@@ -70,6 +70,35 @@ describe("Gemini provider (fetch mocked)", () => {
     ).rejects.toMatchObject({ code: "rate_limited" });
   }, 20_000);
 
+  it("falls back to the reserve model when the main one stays overloaded (503) and reports the detail", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      seen.push(String(url).match(/models\/([^:]+):/)![1]);
+      return String(url).includes("gemini-3.8-flash:") ? new Response(JSON.stringify({ error: { message: "The model is overloaded" } }), { status: 503 }) : ok("{\"a\":2}");
+    });
+    const res = await createGeminiLanguageModel()!.complete({ system: "s", user: "u", toolName: "x", toolDescription: "x", jsonSchema: {}, parse: (r) => r });
+    expect(res.value).toEqual({ a: 2 });
+    expect(res.usage.model).toBe("gemini-3.5-flash-lite");
+    expect(seen.filter((m) => m === "gemini-3.8-flash")).toHaveLength(3); // 3 attempts, then the fallback
+
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { message: "The model is overloaded" } }), { status: 503 }));
+    await expect(
+      createGeminiLanguageModel()!.complete({ system: "s", user: "u", toolName: "x", toolDescription: "x", jsonSchema: {}, parse: (r) => r }),
+    ).rejects.toThrow(/HTTP 503.*overloaded/);
+  }, 40_000);
+
+  it("does not switch model on auth/bad-request errors", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      seen.push(String(url));
+      return new Response(JSON.stringify({ error: { message: "API key not valid" } }), { status: 400 });
+    });
+    await expect(
+      createGeminiLanguageModel()!.complete({ system: "s", user: "u", toolName: "x", toolDescription: "x", jsonSchema: {}, parse: (r) => r }),
+    ).rejects.toThrow(/HTTP 400/);
+    expect(seen).toHaveLength(1);
+  });
+
   it("analyzer sends the photo as inline data and validates the answer", async () => {
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
       calls.push({ url, init });

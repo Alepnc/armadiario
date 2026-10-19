@@ -14,6 +14,8 @@ export function geminiConfig() {
     // gemini-3.8-flash: free tier, multimodal, JSON-schema output. (2.5-flash is closed to new users.)
     stylistModel: process.env.GEMINI_STYLIST_MODEL || "gemini-3.8-flash",
     analysisModel: process.env.GEMINI_ANALYSIS_MODEL || "gemini-3.8-flash",
+    // Used when the main model keeps answering 429/5xx (the free tier is often overloaded).
+    fallbackModel: process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite",
   };
 }
 
@@ -26,6 +28,7 @@ interface GenerateResponse {
 interface GeminiCall {
   apiKey: string;
   model: string;
+  fallbackModel?: string;
   system: string;
   parts: Array<Record<string, unknown>>;
   jsonSchema: Record<string, unknown>;
@@ -33,8 +36,26 @@ interface GeminiCall {
   timeoutMs: number;
 }
 
-/** One generateContent call with JSON-schema constrained output + controlled retries. */
+/** One generateContent call with JSON-schema constrained output, controlled retries and a fallback model. */
 async function callGemini(opts: GeminiCall): Promise<{ json: unknown; usage: ProviderUsage }> {
+  const models = [opts.model, ...(opts.fallbackModel && opts.fallbackModel !== opts.model ? [opts.fallbackModel] : [])];
+  let lastError: AiError | null = null;
+  for (const model of models) {
+    try {
+      return await callGeminiModel(opts, model);
+    } catch (e) {
+      // Only overload/network-type failures justify switching model; bad output or auth errors do not.
+      if (e instanceof AiError && (e.code === "rate_limited" || e.code === "timeout" || e.code === "provider_error" && /HTTP 5\d\d|HTTP 429|rete/.test(e.message))) {
+        lastError = e;
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError ?? new AiError("provider_error", "Errore sconosciuto del provider AI");
+}
+
+async function callGeminiModel(opts: GeminiCall, model: string): Promise<{ json: unknown; usage: ProviderUsage }> {
   const started = Date.now();
   let lastError: AiError | null = null;
   const generationConfig: Record<string, unknown> = {
@@ -42,7 +63,7 @@ async function callGemini(opts: GeminiCall): Promise<{ json: unknown; usage: Pro
     responseJsonSchema: opts.jsonSchema,
     temperature: 0.7,
   };
-  if (/^gemini-2\.5-flash/.test(opts.model)) {
+  if (/^gemini-2\.5-flash/.test(model)) {
     // 2.5-flash "thinks" by default and would eat the token budget: not needed for this task.
     generationConfig.maxOutputTokens = opts.maxTokens;
     generationConfig.thinkingConfig = { thinkingBudget: 0 };
@@ -52,11 +73,11 @@ async function callGemini(opts: GeminiCall): Promise<{ json: unknown; usage: Pro
   }
 
   for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) await new Promise((r) => setTimeout(r, 1200 * attempt));
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 1500 * attempt));
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(opts.model)}:generateContent`, {
+      const res = await fetch(`${BASE}/${encodeURIComponent(model)}:generateContent`, {
         method: "POST",
         signal: controller.signal,
         headers: { "content-type": "application/json", "x-goog-api-key": opts.apiKey },
@@ -66,14 +87,18 @@ async function callGemini(opts: GeminiCall): Promise<{ json: unknown; usage: Pro
           generationConfig,
         }),
       });
-      if (res.status === 429 || res.status >= 500) {
-        lastError = new AiError(res.status === 429 ? "rate_limited" : "provider_error", `Il provider AI ha risposto con stato ${res.status}`);
-        continue;
-      }
       if (!res.ok) {
-        // Google's error text never contains our key; it is the quickest way to debug a 400/403/404.
+        // Google's error text never contains our key; it is the quickest way to debug a 400/403/404/503.
         const detail = ((await res.json().catch(() => ({}))) as { error?: { message?: string } }).error?.message ?? "";
-        throw new AiError("provider_error", `Gemini HTTP ${res.status}: ${detail.slice(0, 200)}`);
+        const err = new AiError(
+          res.status === 429 ? "rate_limited" : "provider_error",
+          `Gemini HTTP ${res.status} (${model}): ${detail.slice(0, 160)}`,
+        );
+        if (res.status === 429 || res.status >= 500) {
+          lastError = err; // transient: retry
+          continue;
+        }
+        throw err;
       }
       const json = (await res.json()) as GenerateResponse;
       if (json.promptFeedback?.blockReason) throw new AiError("invalid_output", "Richiesta bloccata dai filtri del provider");
@@ -89,7 +114,7 @@ async function callGemini(opts: GeminiCall): Promise<{ json: unknown; usage: Pro
         json: parsed,
         usage: {
           provider: "gemini",
-          model: opts.model,
+          model,
           durationMs: Date.now() - started,
           inputTokens: json.usageMetadata?.promptTokenCount,
           outputTokens: json.usageMetadata?.candidatesTokenCount,
@@ -118,6 +143,7 @@ export function createGeminiLanguageModel(): OutfitLanguageModel | null {
       const { json, usage } = await callGemini({
         apiKey: cfg.apiKey,
         model: cfg.stylistModel,
+        fallbackModel: cfg.fallbackModel,
         system: req.system,
         parts: [{ text: req.user }],
         jsonSchema: req.jsonSchema,
@@ -146,6 +172,7 @@ export function createGeminiAnalyzer(): GarmentAnalyzer | null {
       const { json, usage } = await callGemini({
         apiKey: cfg.apiKey,
         model: cfg.analysisModel,
+        fallbackModel: cfg.fallbackModel,
         system: garmentSystemPrompt(categorySlugs),
         parts: [
           { inline_data: { mime_type: mediaType, data: image.toString("base64") } },
