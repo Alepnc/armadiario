@@ -165,7 +165,7 @@ Ogni capacità è configurata **indipendentemente** (`lib/ai/registry.ts`, `lib/
    output strutturato forzato con tool-use + validazione Zod, timeout e retry controllati. Imposta `ANTHROPIC_API_KEY`.
    Il modello di analisi riceve la foto del capo; quello dello stylist riceve **solo testo** (nomi e caratteristiche dei capi, preferenze, nota dell'utente), mai foto o id del DB.
    **Alternativa gratuita — Google Gemini** (`lib/ai/gemini.ts`): imposta `GEMINI_API_KEY` (gratis da aistudio.google.com/apikey) e, se vuoi,
-   `AI_STYLIST_PROVIDER=gemini` / `AI_ANALYSIS_PROVIDER=gemini`. Modello di default `gemini-2.5-flash` (gratuito, accetta immagini).
+   `AI_STYLIST_PROVIDER=gemini` / `AI_ANALYSIS_PROVIDER=gemini`. Modello di default `gemini-3.8-flash` (gratuito; `gemini-2.5-flash` non è più disponibile ai nuovi account).
    ⚠️ Sul piano gratuito Google dichiara di poter usare i contenuti inviati per migliorare i propri prodotti, e i limiti di richieste sono bassi.
    Per i dati più sensibili (foto) valuta `AI_ANALYSIS_PROVIDER=none` e usa Gemini solo per lo stylist (che riceve solo testo).
 3. **Virtual try-on** — Replicate (`lib/ai/tryon/replicate.ts`), pensato per modelli tipo **IDM-VTON** (input: persona + capo + categoria `upper_body|lower_body|dresses`).

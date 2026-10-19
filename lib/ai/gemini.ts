@@ -11,9 +11,9 @@ export function geminiConfig() {
   if (!apiKey) return null;
   return {
     apiKey,
-    // gemini-2.5-flash: free tier, accepts images, supports JSON-schema output.
-    stylistModel: process.env.GEMINI_STYLIST_MODEL || "gemini-2.5-flash",
-    analysisModel: process.env.GEMINI_ANALYSIS_MODEL || "gemini-2.5-flash",
+    // gemini-3.8-flash: free tier, multimodal, JSON-schema output. (2.5-flash is closed to new users.)
+    stylistModel: process.env.GEMINI_STYLIST_MODEL || "gemini-3.8-flash",
+    analysisModel: process.env.GEMINI_ANALYSIS_MODEL || "gemini-3.8-flash",
   };
 }
 
@@ -40,11 +40,16 @@ async function callGemini(opts: GeminiCall): Promise<{ json: unknown; usage: Pro
   const generationConfig: Record<string, unknown> = {
     responseMimeType: "application/json",
     responseJsonSchema: opts.jsonSchema,
-    maxOutputTokens: opts.maxTokens,
     temperature: 0.7,
   };
-  // 2.5-flash "thinks" by default and would eat the token budget: not needed for this task.
-  if (/^gemini-2\.5-flash/.test(opts.model)) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  if (/^gemini-2\.5-flash/.test(opts.model)) {
+    // 2.5-flash "thinks" by default and would eat the token budget: not needed for this task.
+    generationConfig.maxOutputTokens = opts.maxTokens;
+    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  } else {
+    // Newer models always reason internally; leave room so the JSON answer is never truncated.
+    generationConfig.maxOutputTokens = Math.max(opts.maxTokens, 4096);
+  }
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1200 * attempt));

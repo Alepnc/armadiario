@@ -40,12 +40,14 @@ describe("Gemini provider (fetch mocked)", () => {
     expect(value.outfits[0].candidate_id).toBe("c1");
     expect(usage).toMatchObject({ provider: "gemini", inputTokens: 11, outputTokens: 7 });
     const body = JSON.parse(calls[0].init.body as string);
-    expect(calls[0].url).toContain("/models/gemini-2.5-flash:generateContent");
+    expect(calls[0].url).toContain("/models/gemini-3.8-flash:generateContent");
     expect(calls[0].url).not.toContain("test-key");
     expect((calls[0].init.headers as Record<string, string>)["x-goog-api-key"]).toBe("test-key");
     expect(body.generationConfig.responseMimeType).toBe("application/json");
     expect(body.generationConfig.responseJsonSchema.type).toBe("object");
     expect(body.systemInstruction.parts[0].text).toBe("sys");
+    expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(4096);
+    expect(body.generationConfig.thinkingConfig).toBeUndefined();
   });
 
   it("rejects output that does not match the schema instead of trusting it", async () => {

@@ -2,7 +2,7 @@
 // Usage: npm run smoke:ai
 const gemini = process.env.GEMINI_API_KEY;
 if (gemini) {
-  const model = process.env.GEMINI_STYLIST_MODEL || "gemini-2.5-flash";
+  const model = process.env.GEMINI_STYLIST_MODEL || "gemini-3.8-flash";
   const t0 = Date.now();
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
@@ -16,7 +16,7 @@ if (gemini) {
           properties: { candidate_id: { type: "string" }, title: { type: "string" } },
           required: ["candidate_id", "title"],
         },
-        ...(/^gemini-2\.5-flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+        maxOutputTokens: 4096,
       },
     }),
   });
