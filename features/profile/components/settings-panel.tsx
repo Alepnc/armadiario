@@ -74,7 +74,7 @@ export function SettingsPanel({
             checked={ai}
             onChange={(v) => consent("ai", v)}
             label="Analisi dei capi e scelta degli outfit"
-            description="Le foto dei capi (solo quando chiedi l'analisi) e nomi/caratteristiche dei capi, preferenze e note dello stylist vengono inviati al provider AI per suggerire metadati e comporre/spiegare gli outfit."
+            description="Le foto dei capi (solo quando chiedi l'analisi) e nomi/caratteristiche dei capi, preferenze e note dello stylist vengono inviati al provider AI configurato per suggerire metadati e comporre/spiegare gli outfit. Con i piani gratuiti di alcuni provider (es. Gemini) i contenuti inviati possono essere usati dal fornitore per migliorare i suoi prodotti."
           />
           <Toggle
             checked={tryon}
