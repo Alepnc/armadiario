@@ -1,5 +1,5 @@
 /** Product name: provisional, change it here (or via NEXT_PUBLIC_APP_NAME). */
-export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "Wardrobe AI";
+export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "ArmadiarIo";
 export const APP_TAGLINE = "Il tuo armadio, con un occhio di stile.";
 
 /** Buckets are created by supabase/migrations/*_rls_and_storage.sql */

@@ -1,6 +1,6 @@
-# Wardrobe AI
+# ArmadiarIo
 
-> Nome provvisorio: cambialo in un punto solo con `NEXT_PUBLIC_APP_NAME` (default in `lib/config.ts`).
+> Il nome del prodotto si cambia in un punto solo con `NEXT_PUBLIC_APP_NAME` (default in `lib/config.ts`).
 
 Web app per digitalizzare il proprio guardaroba, tenere traccia di cosa è disponibile o in lavaggio e
 farsi comporre outfit usando **solo i capi realmente presenti e disponibili**. Opzionalmente: analisi AI delle
@@ -96,7 +96,7 @@ Vitest · Playwright.
 ## Installazione e avvio rapido (Supabase locale)
 
 ```bash
-cd wardrobe-ai
+cd armadiario
 npm install
 
 # 1. Avvia Supabase in locale (Postgres + Auth + Storage) e applica le migrazioni di supabase/migrations
@@ -109,7 +109,7 @@ cp .env.example .env.local
 #    NEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY / publishable key da `supabase status`>
 #    SUPABASE_SERVICE_ROLE_KEY=<SERVICE_ROLE_KEY>     (serve solo per "Elimina account")
 
-# 3. (facoltativo) dati dimostrativi: account demo@wardrobe.test / demo-password-123, 16 capi disegnati (non foto)
+# 3. (facoltativo) dati dimostrativi: account demo@armadiario.test / demo-password-123, 16 capi disegnati (non foto)
 npm run seed:demo
 
 # 4. Avvio

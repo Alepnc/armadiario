@@ -1,4 +1,4 @@
--- Wardrobe AI — core schema
+-- ArmadiarIo — core schema
 -- Every table is protected by Row Level Security: a user can only ever see and
 -- modify rows whose owner is auth.uid(). Server code ALSO checks ownership.
 

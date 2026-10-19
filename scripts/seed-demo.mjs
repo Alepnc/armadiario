@@ -11,7 +11,7 @@ if (!/127\.0\.0\.1|localhost/.test(url) && process.env.ALLOW_REMOTE_SEED !== "1"
   throw new Error("Refusing to seed a non-local Supabase. Set ALLOW_REMOTE_SEED=1 if you really mean it.");
 }
 
-const EMAIL = "demo@wardrobe.test";
+const EMAIL = "demo@armadiario.test";
 const PASSWORD = "demo-password-123";
 const admin = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
 
